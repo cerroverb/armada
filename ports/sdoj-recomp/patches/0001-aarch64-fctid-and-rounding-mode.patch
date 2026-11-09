@@ -1,0 +1,52 @@
+# espgaluda2-recomp (2026-10-30), Linux AArch64: fctid in the current rounding mode (ported from futari-nx's
+# diet_ops.h fctid) instead of simde's round-half-away, and FPCR's rounding modes read back in the right order.
+diff --git a/thirdparty/rexglue-sdk/include/rex/ppc/context.h b/thirdparty/rexglue-sdk/include/rex/ppc/context.h
+--- a/thirdparty/rexglue-sdk/include/rex/ppc/context.h
++++ b/thirdparty/rexglue-sdk/include/rex/ppc/context.h
+@@ -184,7 +184,14 @@ constexpr uint32_t kRoundMask = 0x03;
+ struct FPSCRRegister {
+   uint32_t csr;
+ 
++#if defined(__aarch64__) || defined(_M_ARM64)
++  // espgaluda2-recomp (2026-10-30): FPCR.RMode is 0 nearest, 1 toward +inf, 2 toward -inf, 3 toward zero (the inverse
++  // of platform/fpscr.h's AArch64 GuestToHost {0, 3, 1, 2}); the table below it is x86's MXCSR.RC order (0 nearest,
++  // 1 down, 2 up, 3 zero), which read back up and down swapped on AArch64.
++  static constexpr size_t HostToGuest[] = {kRoundNearest, kRoundUp, kRoundDown, kRoundTowardZero};
++#else
+   static constexpr size_t HostToGuest[] = {kRoundNearest, kRoundDown, kRoundUp, kRoundTowardZero};
++#endif
+ 
+   using Platform = platform::FPSCRPlatform;
+   static constexpr size_t RoundShift = Platform::RoundShift;
+diff --git a/thirdparty/rexglue-sdk/include/rex/ppc/intrinsics.h b/thirdparty/rexglue-sdk/include/rex/ppc/intrinsics.h
+--- a/thirdparty/rexglue-sdk/include/rex/ppc/intrinsics.h
++++ b/thirdparty/rexglue-sdk/include/rex/ppc/intrinsics.h
+@@ -395,6 +395,28 @@ inline simde__m128i simde_mm_sllv_epi8(simde__m128i a, simde__m128i count) {
+ 
+ }  // namespace rex::ppc
+ 
++// espgaluda2-recomp (2026-10-30): fctid on AArch64, ported from futari-nx (ChanseyIsTheBest, SDK
++// include/rex/ppc/diet_ops.h fctid). The generated code converts with simde_mm_cvtsd_si64, whose portable version is
++// (int64_t)round(v): halves away from zero (0.5 -> 1, 2.5 -> 3) in every rounding mode, where the Xbox 360 and x86's
++// cvtsd2si round in the current mode (the guest's FPSCR.RN, mirrored into FPCR). frinti rounds to an integral double
++// in the current mode and the saturating fcvtzs converts it, as futari-nx does. The generated expression already
++// handles NaN and v > 2^63 before calling it.
++#if defined(__aarch64__) || defined(_M_ARM64)
++namespace rex::ppc {
++inline int64_t cvtsd_si64_current_mode(simde__m128d a) noexcept {
++  const double v = simde_mm_cvtsd_f64(a);
++  double integral;
++  asm("frinti %d0, %d1" : "=w"(integral) : "w"(v));
++  int64_t r;
++  asm("fcvtzs %x0, %d1" : "=r"(r) : "w"(integral));
++  return r;
++}
++}  // namespace rex::ppc
++#undef simde_mm_cvtsd_si64x
++#define simde_mm_cvtsd_si64(a) ::rex::ppc::cvtsd_si64_current_mode(a)
++#define simde_mm_cvtsd_si64x(a) ::rex::ppc::cvtsd_si64_current_mode(a)
++#endif
++
+ //=============================================================================
+ // Global Aliases for Generated Code
+ //=============================================================================

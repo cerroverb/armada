@@ -1,0 +1,20 @@
+# espgaluda2-recomp (2026-10-29): futari-nx's fix (ChanseyIsTheBest, SDK src/core/threading_posix.cpp, futari-nx 1.0.0):
+# WaitMultiple's sleep between polls in microseconds. The alertable WaitAny of the SDK's Audio Worker asks for 1 ms
+# slices; in milliseconds the remainder truncated to 0 and the thread spun (67 % of a core on the Deck, perf).
+diff --git a/thirdparty/rexglue-sdk/src/core/threading_posix.cpp b/thirdparty/rexglue-sdk/src/core/threading_posix.cpp
+--- a/thirdparty/rexglue-sdk/src/core/threading_posix.cpp
++++ b/thirdparty/rexglue-sdk/src/core/threading_posix.cpp
+@@ -360,8 +360,11 @@ class PosixConditionBase {
+       if (timeout == std::chrono::milliseconds::max()) {
+         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+       } else {
+-        auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - now);
+-        auto sleep_time = std::min(remaining, std::chrono::milliseconds(1));
++        // futari-nx (ChanseyIsTheBest, SDK threading_posix.cpp): in microseconds. In milliseconds, the remainder of a
++        // short wait was truncated to 0 and sleep_for(0) does not sleep: the alertable wait asks for 1 ms slices, so
++        // WaitAny spun for its whole timeout (espgaluda2-recomp: the Audio Worker used 67 % of a core on the Deck).
++        auto remaining = std::chrono::duration_cast<std::chrono::microseconds>(end_time - now);
++        auto sleep_time = std::min(remaining, std::chrono::microseconds(1000));
+         std::this_thread::sleep_for(sleep_time);
+       }
+     }

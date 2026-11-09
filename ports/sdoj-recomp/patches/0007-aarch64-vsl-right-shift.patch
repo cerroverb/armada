@@ -1,0 +1,18 @@
+# sdoj-recomp aarch64 port: the AArch64 vsl fix from upstream rexglue-sdk df2743b (Rien G, 2026-08-11, "feat: macOS
+# Support"), only its include/rex/ppc/intrinsics.h hunk. NEON vshl shifts right with a negative count; 64 - shift
+# shifted the carry left, so vsl lost the bits crossing the 64-bit lanes (SDK ppc_tests vsl.test_1..4 on AArch64).
+diff --git a/thirdparty/rexglue-sdk/include/rex/ppc/intrinsics.h b/thirdparty/rexglue-sdk/include/rex/ppc/intrinsics.h
+index 93d87b9..3c2fe09 100644
+--- a/thirdparty/rexglue-sdk/include/rex/ppc/intrinsics.h
++++ b/thirdparty/rexglue-sdk/include/rex/ppc/intrinsics.h
+@@ -258,8 +258,8 @@ inline simde__m128i simde_mm_vsl(simde__m128i a, simde__m128i b) {
+   int64x2_t shift_vector = vdupq_n_s64(shift);
+   uint64x2_t low_shifted = vshlq_u64(va, shift_vector);
+ 
+-  // For the carry, we need right shift
+-  int64x2_t rshift_vector = vdupq_n_s64(64 - shift);
++  // NEON vshl uses negative counts for right shifts.
++  int64x2_t rshift_vector = vdupq_n_s64(shift - 64);
+   uint64x2_t high_carry = vshlq_u64(va, rshift_vector);
+ 
+   // Combine results

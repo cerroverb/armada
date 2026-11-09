@@ -1,0 +1,48 @@
+# sdoj-recomp aarch64 port: upstream rexglue-sdk 85aa46b (Marco Andronaco, 2026-07-28), "fix(system): xex delta patch
+# corruption on aarch64 (#389)", unchanged. SDOJ applies default.xexp and the .binp delta patches at load time; the
+# overlapping memcpy copies differ on AArch64 glibc and corrupt the patched image.
+diff --git a/thirdparty/rexglue-sdk/src/system/lzx.cpp b/thirdparty/rexglue-sdk/src/system/lzx.cpp
+index e3ffec4..6279aa9 100644
+--- a/thirdparty/rexglue-sdk/src/system/lzx.cpp
++++ b/thirdparty/rexglue-sdk/src/system/lzx.cpp
+@@ -163,8 +163,8 @@ int lzxdelta_apply_patch(rex::xex2_delta_patch* patch, size_t patch_len, uint32_
+         std::memset((char*)dest + cur_patch->new_addr, 0, cur_patch->uncompressed_len);
+         break;
+       case 1:  // copy from old -> new
+-        std::memcpy((char*)dest + cur_patch->new_addr, (char*)dest + cur_patch->old_addr,
+-                    cur_patch->uncompressed_len);
++        std::memmove((char*)dest + cur_patch->new_addr, (char*)dest + cur_patch->old_addr,
++                     cur_patch->uncompressed_len);
+         break;
+       default:                                     // delta patch
+         patch_sz = cur_patch->compressed_len - 4;  // -4 because of patch_data field
+diff --git a/thirdparty/rexglue-sdk/src/system/xex_module.cpp b/thirdparty/rexglue-sdk/src/system/xex_module.cpp
+index f3c5759..0726516 100644
+--- a/thirdparty/rexglue-sdk/src/system/xex_module.cpp
++++ b/thirdparty/rexglue-sdk/src/system/xex_module.cpp
+@@ -254,9 +254,9 @@ int XexModule::ApplyPatch(XexModule* module) {
+   // If headers_source_offset is set, copy [source_offset:source_size] to
+   // target_offset
+   if (patch_header->delta_headers_source_offset) {
+-    memcpy(header_ptr + patch_header->delta_headers_target_offset,
+-           header_ptr + patch_header->delta_headers_source_offset,
+-           patch_header->delta_headers_source_size);
++    memmove(header_ptr + patch_header->delta_headers_target_offset,
++            header_ptr + patch_header->delta_headers_source_offset,
++            patch_header->delta_headers_source_size);
+   }
+ 
+   // If new size is smaller than original, null out the difference
+@@ -365,9 +365,9 @@ int XexModule::ApplyPatch(XexModule* module) {
+   // If image_source_offset is set, copy [source_offset:source_size] to
+   // target_offset
+   if (patch_header->delta_image_source_offset) {
+-    memcpy(base_exe + patch_header->delta_image_target_offset,
+-           base_exe + patch_header->delta_image_source_offset,
+-           patch_header->delta_image_source_size);
++    memmove(base_exe + patch_header->delta_image_target_offset,
++            base_exe + patch_header->delta_image_source_offset,
++            patch_header->delta_image_source_size);
+   }
+ 
+   // TODO: should we use new_image_size here instead?

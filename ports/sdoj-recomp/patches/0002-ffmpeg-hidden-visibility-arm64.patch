@@ -1,0 +1,17 @@
+# espgaluda2-recomp (2026-10-30): upstream rexglue-sdk d82ec28 (Tom Clay, 2026-05-12), "fix(ffmpeg): hide internal
+# symbols for linux-arm64 shared link", unchanged. Without it librexruntime.so does not link on Linux AArch64.
+--- a/thirdparty/rexglue-sdk/thirdparty/CMakeLists.txt
++++ b/thirdparty/rexglue-sdk/thirdparty/CMakeLists.txt
+@@ -670,5 +670,10 @@
+     target_link_libraries(libavcodec PRIVATE bcrypt)
+ endif()
+ 
+-# IDE folder organization
+-set_target_properties(libavutil libavcodec PROPERTIES FOLDER "FFmpeg")
++# Hidden visibility is required on aarch64. The NEON .S files use ADRP/ADD
++# PC-relative addressing (movrel) for symbols like ff_cos_*, which the linker
++# only accepts against locally bound symbols when emitting a shared object.
++set_target_properties(libavutil libavcodec PROPERTIES
++    C_VISIBILITY_PRESET hidden
++    VISIBILITY_INLINES_HIDDEN ON
++    FOLDER "FFmpeg")
